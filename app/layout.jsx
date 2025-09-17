@@ -4,8 +4,11 @@ import { Inter } from "next/font/google";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Layanan Publik",
+  title: "Layanan Publik Mobile Legend",
   description: "Sistem Layanan Publik Mobile Responsive",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export const viewport = {
