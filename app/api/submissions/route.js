@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { Submission, NotificationLog, initializeDatabase } from "@/lib/sequelize";
 import { normalizePhoneNumber } from "@/lib/phone";
 import { sendInitialSubmissionNotification } from "@/lib/notify/sicuba";
+import { emailService } from "@/lib/email";
+import { emailTemplates } from "@/lib/email-templates";
 
 // Initialize database on first request
 let dbInitialized = false;
@@ -187,6 +189,39 @@ export async function POST(request) {
     } catch (notificationError) {
       console.error("Error sending initial WhatsApp notification:", notificationError);
       // Don't fail the submission creation if notification fails
+    }
+
+    // Send initial email notification
+    try {
+      const emailTemplate = emailTemplates.submissionConfirmation({
+        name: submission.nama,
+        email: submission.email,
+        serviceType: submission.jenis_layanan,
+        trackingCode: submission.tracking_code,
+        submittedAt: submission.createdAt,
+      });
+
+      const emailResult = await emailService.sendEmail({
+        to: submission.email,
+        subject: "Konfirmasi Pengajuan Layanan",
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+      });
+
+      await NotificationLog.create({
+        submission_id: submission.id,
+        channel: "EMAIL",
+        send_status: emailResult.success ? "SUCCESS" : "FAILED",
+        payload: {
+          to: submission.email,
+          status: "PENGAJUAN_BARU",
+          result: emailResult,
+        },
+      });
+      console.log(`[${new Date().toISOString()}] Initial email notification sent:`, emailResult.success ? "SUCCESS" : "FAILED");
+    } catch (emailError) {
+      console.error("Error sending initial email notification:", emailError);
+      // Don't fail the submission creation if email fails
     }
 
     return NextResponse.json(

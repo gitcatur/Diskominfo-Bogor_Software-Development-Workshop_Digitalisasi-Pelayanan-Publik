@@ -5,7 +5,8 @@ import {
   initializeDatabase,
 } from "@/lib/sequelize";
 import { sendStatusUpdateNotification } from "@/lib/notify/sicuba";
-import { sendStatusUpdateEmail } from "@/lib/notify/email";
+import { emailService } from "@/lib/email";
+import { emailTemplates } from "@/lib/email-templates";
 
 // Initialize database on first request
 let dbInitialized = false;
@@ -106,7 +107,25 @@ export async function PATCH(request, { params }) {
 
     if (submission.email) {
       console.log("📧 Sending email notification to:", submission.email);
-      const emailResult = await sendStatusUpdateEmail(submission, status);
+      
+      // Use new email service with template
+      const emailTemplate = emailTemplates.statusUpdate({
+        name: submission.nama,
+        email: submission.email,
+        serviceType: submission.jenis_layanan,
+        trackingCode: submission.tracking_code,
+        status: status,
+        updatedAt: new Date().toISOString(),
+        notes: `Status pengajuan Anda telah diubah dari ${oldStatus} menjadi ${status}`,
+      });
+
+      const emailResult = await emailService.sendEmail({
+        to: submission.email,
+        subject: "Update Status Pengajuan",
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+      });
+      
       console.log("📧 Email result:", emailResult);
 
       notificationPromises.push(
