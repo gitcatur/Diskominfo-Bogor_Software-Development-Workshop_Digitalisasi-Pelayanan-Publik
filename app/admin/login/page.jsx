@@ -164,11 +164,7 @@ export default function AdminLogin() {
           </a>
         </div>
 
-        <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-sm text-yellow-800">
-            <strong>Workshop Demo:</strong> Username: admin, Password: admin123
-          </p>
-        </div>
+
       </div>
     </div>
   );

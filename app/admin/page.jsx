@@ -1,8 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Table, Select, message, Card, Row, Col } from "antd";
+import {
+  Table,
+  Select,
+  message,
+  Card,
+  Row,
+  Col,
+  Input,
+  DatePicker,
+  Button,
+  Space,
+  Dropdown,
+  Checkbox,
+  Tag,
+  Tooltip as AntTooltip
+} from "antd";
+import {
+  SearchOutlined,
+  FilterOutlined,
+  ClearOutlined,
+  SettingOutlined,
+  DownloadOutlined,
+  ReloadOutlined
+} from "@ant-design/icons";
 import {
   PieChart,
   Pie,
@@ -13,15 +36,36 @@ import {
 } from "recharts";
 
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [chartData, setChartData] = useState([]);
   const [updatingStatus, setUpdatingStatus] = useState({}); // Track which submission is being updated
   const [refreshing, setRefreshing] = useState(false); // Track refresh loading state
+
+  // Filter and search states
+  const [globalSearchText, setGlobalSearchText] = useState("");
+  const [filters, setFilters] = useState({
+    status: [], // Multi-value filter for status
+    tracking_code: "",
+    nama: "",
+    jenis_layanan: [], // Multi-value filter for jenis layanan
+    created_at: null,
+    updated_at: null,
+  });
+  const [sortedInfo, setSortedInfo] = useState({});
+  const [showFilters, setShowFilters] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({
+    tracking_code: true,
+    nama: true,
+    jenis_layanan: true,
+    status: true,
+    created_at: true,
+    updated_at: true,
+  });
 
   const COLORS = ["#ffc107", "#1890ff", "#52c41a", "#ff4d4f"];
 
@@ -196,21 +240,183 @@ export default function AdminDashboard() {
     router.push("/admin/login");
   };
 
+  // Get unique values for dropdown filters
+  const uniqueJenisLayanan = useMemo(() => {
+    const unique = [...new Set(submissions.map(item => item.jenis_layanan))];
+    return unique.filter(Boolean).sort();
+  }, [submissions]);
+
+  // Filter and search logic
+  const filteredAndSearchedSubmissions = useMemo(() => {
+    let filtered = submissions;
+
+    // Apply global search
+    if (globalSearchText) {
+      const searchLower = globalSearchText.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.tracking_code?.toLowerCase().includes(searchLower) ||
+        item.nama?.toLowerCase().includes(searchLower) ||
+        item.jenis_layanan?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply column filters
+    // Multi-value status filter
+    if (filters.status.length > 0) {
+      filtered = filtered.filter(item => filters.status.includes(item.status));
+    }
+
+    if (filters.tracking_code) {
+      const trackingSearchLower = filters.tracking_code.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.tracking_code?.toLowerCase().includes(trackingSearchLower)
+      );
+    }
+
+    if (filters.nama) {
+      const namaSearchLower = filters.nama.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.nama?.toLowerCase().includes(namaSearchLower)
+      );
+    }
+
+    // Multi-value jenis layanan filter
+    if (filters.jenis_layanan.length > 0) {
+      filtered = filtered.filter(item => filters.jenis_layanan.includes(item.jenis_layanan));
+    }
+
+    if (filters.created_at && filters.created_at.length === 2) {
+      const [startDate, endDate] = filters.created_at;
+      filtered = filtered.filter(item => {
+        const itemDate = new Date(item.created_at);
+        return itemDate >= startDate.startOf('day').toDate() &&
+               itemDate <= endDate.endOf('day').toDate();
+      });
+    }
+
+    if (filters.updated_at && filters.updated_at.length === 2) {
+      const [startDate, endDate] = filters.updated_at;
+      filtered = filtered.filter(item => {
+        const itemDate = new Date(item.updated_at);
+        return itemDate >= startDate.startOf('day').toDate() &&
+               itemDate <= endDate.endOf('day').toDate();
+      });
+    }
+
+    return filtered;
+  }, [submissions, globalSearchText, filters]);
+
+  // Handle filter changes
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setGlobalSearchText("");
+    setFilters({
+      status: [],
+      tracking_code: "",
+      nama: "",
+      jenis_layanan: [],
+      created_at: null,
+      updated_at: null,
+    });
+    setSortedInfo({});
+  };
+
+  // Get active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (globalSearchText) count++;
+    if (filters.status.length > 0) count++;
+    if (filters.tracking_code) count++;
+    if (filters.nama) count++;
+    if (filters.jenis_layanan.length > 0) count++;
+    if (filters.created_at) count++;
+    if (filters.updated_at) count++;
+    return count;
+  }, [globalSearchText, filters]);
+
+  // Handle table changes (sorting, filtering)
+  const handleTableChange = (pagination, filters, sorter) => {
+    setSortedInfo(sorter);
+  };
+
+  // Column visibility controls
+  const handleColumnVisibilityChange = (column, visible) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [column]: visible
+    }));
+  };
+
+  // Filter preset functions
+  const applyFilterPreset = (preset) => {
+    switch (preset) {
+      case 'active':
+        handleFilterChange('status', ['PENGAJUAN_BARU', 'DIPROSES']);
+        break;
+      case 'completed':
+        handleFilterChange('status', ['SELESAI', 'DITOLAK']);
+        break;
+      case 'new':
+        handleFilterChange('status', ['PENGAJUAN_BARU']);
+        break;
+      case 'processing':
+        handleFilterChange('status', ['DIPROSES']);
+        break;
+      case 'finished':
+        handleFilterChange('status', ['SELESAI']);
+        break;
+      case 'rejected':
+        handleFilterChange('status', ['DITOLAK']);
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Quick select functions for multi-select filters
+  const selectAllStatus = () => {
+    handleFilterChange('status', ['PENGAJUAN_BARU', 'DIPROSES', 'SELESAI', 'DITOLAK']);
+  };
+
+  const selectAllJenisLayanan = () => {
+    handleFilterChange('jenis_layanan', uniqueJenisLayanan);
+  };
+
+  const clearStatusFilter = () => {
+    handleFilterChange('status', []);
+  };
+
+  const clearJenisLayananFilter = () => {
+    handleFilterChange('jenis_layanan', []);
+  };
+
   const columns = [
     {
       title: "Kode Tracking",
       dataIndex: "tracking_code",
       key: "tracking_code",
-      render: (text) => (
-        <div className="max-w-[120px] sm:max-w-[200px] lg:max-w-[300px]">
-          <span
-            className="font-mono text-xs sm:text-sm break-all leading-tight"
-            title={text}
-          >
-            {text}
-          </span>
-        </div>
-      ),
+      sorter: (a, b) => (a.tracking_code || "").localeCompare(b.tracking_code || ""),
+      sortOrder: sortedInfo.columnKey === 'tracking_code' ? sortedInfo.order : null,
+      render: (text) => {
+        const highlighted = globalSearchText && text?.toLowerCase().includes(globalSearchText.toLowerCase());
+        return (
+          <div className="max-w-[120px] sm:max-w-[200px] lg:max-w-[300px]">
+            <span
+              className={`font-mono text-xs sm:text-sm break-all leading-tight ${highlighted ? 'bg-yellow-200' : ''}`}
+              title={text}
+            >
+              {text}
+            </span>
+          </div>
+        );
+      },
       width: 200,
       fixed: "left",
     },
@@ -218,38 +424,53 @@ export default function AdminDashboard() {
       title: "Nama",
       dataIndex: "nama",
       key: "nama",
+      sorter: (a, b) => (a.nama || "").localeCompare(b.nama || ""),
+      sortOrder: sortedInfo.columnKey === 'nama' ? sortedInfo.order : null,
       width: 120,
-      render: (text) => (
-        <div className="max-w-[80px] sm:max-w-[120px]">
-          <span
-            className="text-xs sm:text-sm break-words leading-tight"
-            title={text}
-          >
-            {text}
-          </span>
-        </div>
-      ),
+      render: (text) => {
+        const highlighted = globalSearchText && text?.toLowerCase().includes(globalSearchText.toLowerCase());
+        return (
+          <div className="max-w-[80px] sm:max-w-[120px]">
+            <span
+              className={`text-xs sm:text-sm break-words leading-tight ${highlighted ? 'bg-yellow-200' : ''}`}
+              title={text}
+            >
+              {text}
+            </span>
+          </div>
+        );
+      },
     },
     {
       title: "Jenis Layanan",
       dataIndex: "jenis_layanan",
       key: "jenis_layanan",
+      sorter: (a, b) => (a.jenis_layanan || "").localeCompare(b.jenis_layanan || ""),
+      sortOrder: sortedInfo.columnKey === 'jenis_layanan' ? sortedInfo.order : null,
       width: 120,
-      render: (text) => (
-        <div className="max-w-[80px] sm:max-w-[120px]">
-          <span
-            className="text-xs sm:text-sm break-words leading-tight"
-            title={text}
-          >
-            {text}
-          </span>
-        </div>
-      ),
+      render: (text) => {
+        const highlighted = globalSearchText && text?.toLowerCase().includes(globalSearchText.toLowerCase());
+        return (
+          <div className="max-w-[80px] sm:max-w-[120px]">
+            <span
+              className={`text-xs sm:text-sm break-words leading-tight ${highlighted ? 'bg-yellow-200' : ''}`}
+              title={text}
+            >
+              {text}
+            </span>
+          </div>
+        );
+      },
     },
     {
       title: "Status",
       dataIndex: "status",
       key: "status",
+      sorter: (a, b) => {
+        const statusOrder = { "PENGAJUAN_BARU": 1, "DIPROSES": 2, "SELESAI": 3, "DITOLAK": 4 };
+        return (statusOrder[a.status] || 5) - (statusOrder[b.status] || 5);
+      },
+      sortOrder: sortedInfo.columnKey === 'status' ? sortedInfo.order : null,
       width: 180,
       render: (status, record) => (
         <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
@@ -299,6 +520,8 @@ export default function AdminDashboard() {
       title: "Dibuat",
       dataIndex: "created_at",
       key: "created_at",
+      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      sortOrder: sortedInfo.columnKey === 'created_at' ? sortedInfo.order : null,
       width: 150,
       responsive: ["lg"],
       render: (date) => {
@@ -330,6 +553,8 @@ export default function AdminDashboard() {
       title: "Diupdate",
       dataIndex: "updated_at",
       key: "updated_at",
+      sorter: (a, b) => new Date(a.updated_at) - new Date(b.updated_at),
+      sortOrder: sortedInfo.columnKey === 'updated_at' ? sortedInfo.order : null,
       width: 150,
       responsive: ["lg"],
       render: (date) => {
@@ -357,12 +582,79 @@ export default function AdminDashboard() {
         }
       },
     },
-  ];
+  ].filter(column => visibleColumns[column.key]);
 
-  const filteredSubmissions =
-    statusFilter === "ALL"
-      ? submissions
-      : submissions.filter((sub) => sub.status === statusFilter);
+  // Column visibility menu
+  const columnMenu = {
+    items: [
+      {
+        key: 'tracking_code',
+        label: (
+          <Checkbox
+            checked={visibleColumns.tracking_code}
+            onChange={(e) => handleColumnVisibilityChange('tracking_code', e.target.checked)}
+          >
+            Kode Tracking
+          </Checkbox>
+        ),
+      },
+      {
+        key: 'nama',
+        label: (
+          <Checkbox
+            checked={visibleColumns.nama}
+            onChange={(e) => handleColumnVisibilityChange('nama', e.target.checked)}
+          >
+            Nama
+          </Checkbox>
+        ),
+      },
+      {
+        key: 'jenis_layanan',
+        label: (
+          <Checkbox
+            checked={visibleColumns.jenis_layanan}
+            onChange={(e) => handleColumnVisibilityChange('jenis_layanan', e.target.checked)}
+          >
+            Jenis Layanan
+          </Checkbox>
+        ),
+      },
+      {
+        key: 'status',
+        label: (
+          <Checkbox
+            checked={visibleColumns.status}
+            onChange={(e) => handleColumnVisibilityChange('status', e.target.checked)}
+          >
+            Status
+          </Checkbox>
+        ),
+      },
+      {
+        key: 'created_at',
+        label: (
+          <Checkbox
+            checked={visibleColumns.created_at}
+            onChange={(e) => handleColumnVisibilityChange('created_at', e.target.checked)}
+          >
+            Dibuat
+          </Checkbox>
+        ),
+      },
+      {
+        key: 'updated_at',
+        label: (
+          <Checkbox
+            checked={visibleColumns.updated_at}
+            onChange={(e) => handleColumnVisibilityChange('updated_at', e.target.checked)}
+          >
+            Diupdate
+          </Checkbox>
+        ),
+      },
+    ],
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -381,89 +673,15 @@ export default function AdminDashboard() {
               </p>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <button
+              <Button
+                icon={<ReloadOutlined />}
                 onClick={handleRefresh}
-                disabled={refreshing || loading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center text-sm sm:text-base mr-2"
+                loading={refreshing || loading}
+                type="primary"
+                size="middle"
               >
-                {refreshing ? (
-                  <>
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Refreshing...
-                  </>
-                ) : loading ? (
-                  <>
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Loading...
-                  </>
-                ) : (
-                  "Refresh"
-                )}
-              </button>
-
-              {/* Force Refresh Button - Hidden for production */}
-              {/* <button
-                 onClick={() => {
-                   // Force hard refresh
-                   window.location.reload();
-                 }}
-                 disabled={refreshing || loading}
-                 className="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center text-sm sm:text-base mr-2"
-                 title="Force hard refresh untuk bypass semua cache"
-               >
-                 <svg
-                   className="w-4 h-4 mr-1"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24"
-                 >
-                   <path
-                     strokeLinecap="round"
-                     strokeLinejoin="round"
-                     strokeWidth={2}
-                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                   />
-                 </svg>
-                 Force Refresh
-               </button> */}
+                {refreshing ? "Refreshing..." : loading ? "Loading..." : "Refresh"}
+              </Button>
 
               <button
                 onClick={handleLogout}
@@ -738,44 +956,355 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Table */}
-        <Card title="Daftar Pengajuan">
+        <Card
+          title={
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+              <span>Daftar Pengajuan</span>
+              <div className="flex items-center space-x-2">
+                {activeFilterCount > 0 && (
+                  <Tag color="blue">{activeFilterCount} Filter Aktif</Tag>
+                )}
+                <Button
+                  icon={<FilterOutlined />}
+                  onClick={() => setShowFilters(!showFilters)}
+                  type={showFilters ? "primary" : "default"}
+                  size="small"
+                >
+                  Filter
+                </Button>
+                <Dropdown menu={columnMenu} trigger={['click']}>
+                  <Button icon={<SettingOutlined />} size="small">
+                    Kolom
+                  </Button>
+                </Dropdown>
+              </div>
+            </div>
+          }
+        >
+          {/* Global Search */}
           <div className="mb-4">
-            <Select
-              value={statusFilter}
-              onChange={setStatusFilter}
-              style={{ width: "100%", maxWidth: 200 }}
-              placeholder="Filter by status"
-              disabled={loading || Object.values(updatingStatus).some(Boolean)}
-              loading={loading}
-            >
-              <Option value="ALL">Semua Status</Option>
-              <Option value="PENGAJUAN_BARU">Pengajuan Baru</Option>
-              <Option value="DIPROSES">Sedang Diproses</Option>
-              <Option value="SELESAI">Selesai</Option>
-              <Option value="DITOLAK">Ditolak</Option>
-            </Select>
-            {loading && (
-              <span className="ml-2 text-xs sm:text-sm text-gray-500">
-                Memuat data...
-              </span>
-            )}
+            <Input.Search
+              placeholder="Cari berdasarkan kode tracking, nama, atau jenis layanan..."
+              value={globalSearchText}
+              onChange={(e) => setGlobalSearchText(e.target.value)}
+              onSearch={setGlobalSearchText}
+              style={{ maxWidth: 400 }}
+              allowClear
+              disabled={loading}
+            />
           </div>
+
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <Card className="mb-4" size="small">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Status Filter */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Status {filters.status.length > 0 && (
+                        <Tag color="blue" size="small">{filters.status.length}</Tag>
+                      )}
+                    </label>
+                    <div className="flex space-x-1">
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={selectAllStatus}
+                        disabled={loading}
+                        className="p-0 h-auto text-xs"
+                      >
+                        Semua
+                      </Button>
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={clearStatusFilter}
+                        disabled={loading || filters.status.length === 0}
+                        className="p-0 h-auto text-xs"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <Select
+                    mode="multiple"
+                    value={filters.status}
+                    onChange={(value) => handleFilterChange('status', value)}
+                    style={{ width: "100%" }}
+                    placeholder="Pilih status..."
+                    disabled={loading}
+                    maxTagCount={2}
+                    maxTagPlaceholder={(omittedValues) => `+${omittedValues.length} more`}
+                    allowClear
+                  >
+                    <Option value="PENGAJUAN_BARU">Pengajuan Baru</Option>
+                    <Option value="DIPROSES">Sedang Diproses</Option>
+                    <Option value="SELESAI">Selesai</Option>
+                    <Option value="DITOLAK">Ditolak</Option>
+                  </Select>
+
+                  {/* Quick Filter Presets */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => applyFilterPreset('active')}
+                      disabled={loading}
+                      className="text-xs h-6 px-2"
+                    >
+                      Aktif
+                    </Button>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => applyFilterPreset('completed')}
+                      disabled={loading}
+                      className="text-xs h-6 px-2"
+                    >
+                      Selesai
+                    </Button>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => applyFilterPreset('new')}
+                      disabled={loading}
+                      className="text-xs h-6 px-2"
+                    >
+                      Baru
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Tracking Code Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Kode Tracking
+                  </label>
+                  <Input
+                    value={filters.tracking_code}
+                    onChange={(e) => handleFilterChange('tracking_code', e.target.value)}
+                    placeholder="Cari kode tracking..."
+                    allowClear
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Nama Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nama
+                  </label>
+                  <Input
+                    value={filters.nama}
+                    onChange={(e) => handleFilterChange('nama', e.target.value)}
+                    placeholder="Cari nama..."
+                    allowClear
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Jenis Layanan Filter */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Jenis Layanan {filters.jenis_layanan.length > 0 && (
+                        <Tag color="green" size="small">{filters.jenis_layanan.length}</Tag>
+                      )}
+                    </label>
+                    <div className="flex space-x-1">
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={selectAllJenisLayanan}
+                        disabled={loading || uniqueJenisLayanan.length === 0}
+                        className="p-0 h-auto text-xs"
+                      >
+                        Semua
+                      </Button>
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={clearJenisLayananFilter}
+                        disabled={loading || filters.jenis_layanan.length === 0}
+                        className="p-0 h-auto text-xs"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <Select
+                    mode="multiple"
+                    value={filters.jenis_layanan}
+                    onChange={(value) => handleFilterChange('jenis_layanan', value)}
+                    style={{ width: "100%" }}
+                    placeholder="Pilih jenis layanan..."
+                    disabled={loading}
+                    maxTagCount={2}
+                    maxTagPlaceholder={(omittedValues) => `+${omittedValues.length} more`}
+                    allowClear
+                    showSearch
+                    filterOption={(input, option) =>
+                      option?.children?.toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    {uniqueJenisLayanan.map(layanan => (
+                      <Option key={layanan} value={layanan}>{layanan}</Option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Created Date Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tanggal Dibuat
+                  </label>
+                  <RangePicker
+                    value={filters.created_at}
+                    onChange={(dates) => handleFilterChange('created_at', dates)}
+                    style={{ width: "100%" }}
+                    placeholder={['Dari tanggal', 'Sampai tanggal']}
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Updated Date Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tanggal Diupdate
+                  </label>
+                  <RangePicker
+                    value={filters.updated_at}
+                    onChange={(dates) => handleFilterChange('updated_at', dates)}
+                    style={{ width: "100%" }}
+                    placeholder={['Dari tanggal', 'Sampai tanggal']}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Active Filters Summary */}
+              {activeFilterCount > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <div className="text-sm font-medium text-blue-800 mb-2">Filter Aktif:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {globalSearchText && (
+                      <Tag
+                        color="orange"
+                        closable
+                        onClose={() => setGlobalSearchText("")}
+                        className="text-xs"
+                      >
+                        Pencarian: "{globalSearchText}"
+                      </Tag>
+                    )}
+                    {filters.status.length > 0 && (
+                      <Tag
+                        color="blue"
+                        closable
+                        onClose={() => handleFilterChange('status', [])}
+                        className="text-xs"
+                      >
+                        Status: {filters.status.join(', ')}
+                      </Tag>
+                    )}
+                    {filters.tracking_code && (
+                      <Tag
+                        color="purple"
+                        closable
+                        onClose={() => handleFilterChange('tracking_code', '')}
+                        className="text-xs"
+                      >
+                        Tracking: "{filters.tracking_code}"
+                      </Tag>
+                    )}
+                    {filters.nama && (
+                      <Tag
+                        color="cyan"
+                        closable
+                        onClose={() => handleFilterChange('nama', '')}
+                        className="text-xs"
+                      >
+                        Nama: "{filters.nama}"
+                      </Tag>
+                    )}
+                    {filters.jenis_layanan.length > 0 && (
+                      <Tag
+                        color="green"
+                        closable
+                        onClose={() => handleFilterChange('jenis_layanan', [])}
+                        className="text-xs"
+                      >
+                        Layanan: {filters.jenis_layanan.length > 2
+                          ? `${filters.jenis_layanan.slice(0, 2).join(', ')} +${filters.jenis_layanan.length - 2}`
+                          : filters.jenis_layanan.join(', ')
+                        }
+                      </Tag>
+                    )}
+                    {filters.created_at && (
+                      <Tag
+                        color="magenta"
+                        closable
+                        onClose={() => handleFilterChange('created_at', null)}
+                        className="text-xs"
+                      >
+                        Dibuat: {filters.created_at[0].format('DD/MM/YYYY')} - {filters.created_at[1].format('DD/MM/YYYY')}
+                      </Tag>
+                    )}
+                    {filters.updated_at && (
+                      <Tag
+                        color="volcano"
+                        closable
+                        onClose={() => handleFilterChange('updated_at', null)}
+                        className="text-xs"
+                      >
+                        Diupdate: {filters.updated_at[0].format('DD/MM/YYYY')} - {filters.updated_at[1].format('DD/MM/YYYY')}
+                      </Tag>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Filter Actions */}
+              <div className="flex justify-between items-center mt-4 pt-4 border-t">
+                <div className="text-sm text-gray-600">
+                  Menampilkan <span className="font-semibold text-blue-600">{filteredAndSearchedSubmissions.length}</span> dari <span className="font-semibold">{submissions.length}</span> data
+                  {activeFilterCount > 0 && (
+                    <span className="text-blue-600"> • {activeFilterCount} filter aktif</span>
+                  )}
+                </div>
+                <Space>
+                  <Button
+                    icon={<ClearOutlined />}
+                    onClick={clearAllFilters}
+                    disabled={loading || activeFilterCount === 0}
+                    size="small"
+                    danger
+                  >
+                    Clear Semua Filter
+                  </Button>
+                </Space>
+              </div>
+            </Card>
+          )}
 
           <div className="relative">
             <Table
               columns={columns}
-              dataSource={filteredSubmissions}
+              dataSource={filteredAndSearchedSubmissions}
               rowKey="id"
               loading={loading}
+              onChange={handleTableChange}
               scroll={{ x: 800, y: 400 }}
               pagination={{
                 pageSize: 10,
-                showSizeChanger: false,
-                showQuickJumper: false,
+                showSizeChanger: true,
+                showQuickJumper: true,
                 showTotal: (total, range) =>
                   `${range[0]}-${range[1]} dari ${total} pengajuan`,
                 size: "small",
                 responsive: true,
+                pageSizeOptions: ['10', '20', '50', '100'],
               }}
               size="small"
               className="responsive-table"
