@@ -42,9 +42,40 @@ export default function NewSubmission() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    let newValue = type === "checkbox" ? checked : value;
+
+    // Handle NIK input - only allow digits and limit to 16
+    if (name === "nik") {
+      newValue = value.replace(/\D/g, "").slice(0, 16);
+    }
+
+    // Handle WhatsApp input - auto format with +62
+    if (name === "no_wa") {
+      // Remove all non-digit characters
+      const cleaned = value.replace(/\D/g, "");
+
+      // If empty, show empty
+      if (!cleaned) {
+        newValue = "";
+      }
+      // If starts with 62, show as +62...
+      else if (cleaned.startsWith("62")) {
+        newValue = `+${cleaned}`;
+      }
+      // If starts with 0, remove it and add +62
+      else if (cleaned.startsWith("0")) {
+        const withoutZero = cleaned.slice(1);
+        newValue = withoutZero ? `+62${withoutZero}` : "+62";
+      }
+      // Otherwise, add +62 prefix
+      else {
+        newValue = `+62${cleaned}`;
+      }
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: newValue,
     }));
     // Clear error when user starts typing
     if (errors[name]) {
@@ -67,7 +98,9 @@ export default function NewSubmission() {
       newErrors.nik = "NIK hanya boleh berisi angka";
     }
 
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (!formData.email.trim()) {
+      newErrors.email = "Email wajib diisi";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Format email tidak valid";
     }
 
@@ -172,6 +205,8 @@ export default function NewSubmission() {
             value={formData.nik}
             onChange={handleChange}
             maxLength={16}
+            pattern="[0-9]{16}"
+            inputMode="numeric"
             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black ${
               errors.nik ? "border-red-500" : "border-gray-300"
             }`}
@@ -188,7 +223,7 @@ export default function NewSubmission() {
             htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-2"
           >
-            Email (Opsional)
+            Email *
           </label>
           <input
             type="email"
@@ -223,7 +258,7 @@ export default function NewSubmission() {
             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black ${
               errors.no_wa ? "border-red-500" : "border-gray-300"
             }`}
-            placeholder="08xxxxxxxxxx (akan diformat ke +62...)"
+            placeholder="8xxxxxxxxxx (otomatis +62)"
           />
           {errors.no_wa && (
             <p className="mt-1 text-sm text-red-600">{errors.no_wa}</p>

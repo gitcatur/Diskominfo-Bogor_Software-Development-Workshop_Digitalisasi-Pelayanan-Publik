@@ -15,15 +15,12 @@ import {
   Space,
   Dropdown,
   Checkbox,
-  Tag,
-  Tooltip as AntTooltip
+  Tag
 } from "antd";
 import {
-  SearchOutlined,
   FilterOutlined,
   ClearOutlined,
   SettingOutlined,
-  DownloadOutlined,
   ReloadOutlined
 } from "@ant-design/icons";
 import {

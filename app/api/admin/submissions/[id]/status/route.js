@@ -17,6 +17,34 @@ const initDB = async () => {
   }
 };
 
+// Status progression validation
+const validateStatusProgression = (currentStatus, newStatus) => {
+  // Define allowed status transitions
+  const allowedTransitions = {
+    "PENGAJUAN_BARU": ["DIPROSES", "DITOLAK"],
+    "DIPROSES": ["SELESAI", "DITOLAK"],
+    "SELESAI": [], // Final status - no further changes allowed
+    "DITOLAK": [] // Final status - no further changes allowed
+  };
+
+  // Check if transition is allowed
+  const allowedNextStatuses = allowedTransitions[currentStatus] || [];
+
+  if (!allowedNextStatuses.includes(newStatus)) {
+    return {
+      isValid: false,
+      message: `Status tidak dapat diubah dari "${currentStatus}" ke "${newStatus}". ` +
+               `Status hanya dapat maju: PENGAJUAN_BARU → DIPROSES → SELESAI. ` +
+               `Status yang diizinkan: ${allowedNextStatuses.length > 0 ? allowedNextStatuses.join(", ") : "tidak ada (status final)"}`
+    };
+  }
+
+  return {
+    isValid: true,
+    message: "Status transition valid"
+  };
+};
+
 // Handle CORS preflight
 export async function OPTIONS() {
   console.log("🔍 OPTIONS request received for status update");
@@ -73,6 +101,22 @@ export async function PATCH(request, { params }) {
         { status: 400 }
       );
     }
+
+    // Validate status progression
+    const validation = validateStatusProgression(submission.status, status);
+    if (!validation.isValid) {
+      console.log("❌ Invalid status transition:", submission.status, "->", status);
+      return NextResponse.json(
+        {
+          message: validation.message,
+          current_status: submission.status,
+          attempted_status: status
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log("✅ Valid status transition:", submission.status, "->", status);
 
     // Update status
     const oldStatus = submission.status;
