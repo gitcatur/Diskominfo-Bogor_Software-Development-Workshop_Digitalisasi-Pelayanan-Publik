@@ -42,29 +42,40 @@ export default function AdminLogin() {
 
     try {
       // Simulate network delay for better UX
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Simple authentication for workshop - in production use proper auth
-      if (formData.username === "admin" && formData.password === "admin123") {
-        // Set session (in production use proper session management)
-        localStorage.setItem("adminLoggedIn", "true");
-        console.log("Login successful, localStorage set"); // Debug log
-        
-        // Show success message
-        message.success("Login berhasil! Mengalihkan ke dashboard...");
-        
-        // Small delay to show the success message
-        setTimeout(() => {
-          router.push("/admin");
-        }, 1000);
-      } else {
-        setErrors({ submit: "Username atau password salah" });
-        setIsSubmitting(false); // Reset loading state on error
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setErrors({ submit: result.message || "Username atau password salah" });
+        setIsSubmitting(false);
+        return;
       }
+
+      localStorage.setItem("adminLoggedIn", "true");
+      localStorage.setItem("adminInfo", JSON.stringify(result.admin));
+      console.log("Login successful, admin info stored");
+
+      message.success("Login berhasil! Mengalihkan ke dashboard...");
+
+      setTimeout(() => {
+        router.push("/admin");
+      }, 1000);
     } catch (error) {
       console.error("Login error:", error);
       setErrors({ submit: "Terjadi kesalahan" });
-      setIsSubmitting(false); // Reset loading state on error
+      setIsSubmitting(false);
     }
   };
 

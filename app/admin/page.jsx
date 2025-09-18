@@ -192,6 +192,7 @@ export default function AdminDashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem("adminLoggedIn");
+    localStorage.removeItem("adminInfo");
     router.push("/admin/login");
   };
 
